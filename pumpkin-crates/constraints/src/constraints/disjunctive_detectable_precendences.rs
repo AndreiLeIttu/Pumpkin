@@ -1,0 +1,56 @@
+use pumpkin_core::ConstraintOperationError;
+use pumpkin_core::Solver;
+use pumpkin_core::constraints::Constraint;
+use pumpkin_core::proof::ConstraintTag;
+use pumpkin_core::variables::IntegerVariable;
+use pumpkin_core::variables::Literal;
+use pumpkin_propagators::disjunctive::ArgDisjunctiveTask;
+use pumpkin_propagators::disjunctive::DetectablePrecedencesConstructor;
+
+/// Creates the [Disjunctive](https://sofdem.github.io/gccat/gccat/Cdisjunctive.html) [`Constraint`] (also called the `NoOverlap` Constraint or the `Unary Resource` Constraint).
+///
+/// This constraint ensures that at no point in time, any of the tasks are overlapping.
+///
+/// The implementation uses detectable precedences reasoning as implemented in \[1\]. It propagates both the
+/// lower-bound and the upper-bound of the provided tasks.
+///
+/// The length of `start_times` and `durations` should be the same; if
+/// this is not the case then this method will panic.
+///
+/// It follows the [MiniZinc specifications](https://docs.minizinc.dev/en/stable/lib-globals-scheduling.html#mzn-ref-globals-scheduling-disjunctive-strict) which means that tasks with duration 0 can only be scheduled when no other tasks are running.
+///
+/// # Bibliography
+/// - \[1\] H. Fahimi and C. G. Quimper, ‘Linear-time filtering algorithms for the disjunctive constraint’, in Proceedings of the AAAI Conference on Artificial Intelligence, vol. 28, no. 1, Jun. 2014.
+
+pub fn disjunctive_detectable_precendences<Var: IntegerVariable + 'static>(
+    tasks: impl IntoIterator<Item = ArgDisjunctiveTask<Var>>,
+    constraint_tag: ConstraintTag,
+) -> impl Constraint {
+    DisjunctiveDPConstraint {
+        tasks: tasks.into_iter().collect::<Vec<_>>(),
+        constraint_tag,
+    }
+}
+
+/// The representation of a `disjunctive` (`no-overlap`) constraint.
+struct DisjunctiveDPConstraint<Var> {
+    tasks: Vec<ArgDisjunctiveTask<Var>>,
+    constraint_tag: ConstraintTag,
+}
+
+impl<Var: IntegerVariable + 'static> Constraint for DisjunctiveDPConstraint<Var> {
+    fn post(self, solver: &mut Solver) -> Result<(), ConstraintOperationError> {
+        // We post post a single propagator as the propagation is internally done on both bounds.
+        DetectablePrecedencesConstructor::new(self.tasks.clone(), self.constraint_tag).post(solver)
+    }
+
+    fn implied_by(
+        self,
+        solver: &mut Solver,
+        reification_literal: Literal,
+    ) -> Result<(), ConstraintOperationError> {
+        // We post post a single propagator as the propagation is internally done on both bounds.
+        DetectablePrecedencesConstructor::new(self.tasks.clone(), self.constraint_tag)
+            .implied_by(solver, reification_literal)
+    }
+}
