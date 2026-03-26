@@ -371,6 +371,32 @@ macro_rules! check_parameters {
     };
 }
 
+fn compile_disjunctive_detectable_precedences(
+    context: &mut CompilationContext<'_>,
+    exprs: &[flatzinc::Expr],
+    constraint_tag: ConstraintTag,
+) -> Result<bool, FlatZincError> {
+    check_parameters!(exprs, 2, "pumpkin_disjunctive");
+
+    let start_times = context.resolve_integer_variable_array(&exprs[0])?;
+    let durations = context.resolve_array_integer_constants(&exprs[1])?;
+
+    assert_eq!(start_times.len(), durations.len());
+
+    let post_result = pumpkin_constraints::disjunctive_detectable_precendences(
+        start_times
+            .iter()
+            .zip(durations.iter())
+            .map(|(&start_time, &duration)| ArgDisjunctiveTask {
+                start_time,
+                processing_time: duration,
+            }),
+        constraint_tag,
+    )
+    .post(context.solver);
+    Ok(post_result.is_ok())
+}
+
 fn compile_disjunctive_strict(
     context: &mut CompilationContext<'_>,
     exprs: &[flatzinc::Expr],
