@@ -33,6 +33,7 @@ mod boolean;
 mod clause;
 mod cumulative;
 mod disjunctive_strict;
+mod disjunctive_detectable_precendences;
 mod element;
 mod table;
 
@@ -42,5 +43,6 @@ pub use boolean::*;
 pub use clause::*;
 pub use cumulative::*;
 pub use disjunctive_strict::*;
+pub use disjunctive_detectable_precendences::*;
 pub use element::*;
 pub use table::*;

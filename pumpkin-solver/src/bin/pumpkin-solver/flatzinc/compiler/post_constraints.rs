@@ -27,6 +27,9 @@ pub(crate) fn run(
         let flatzinc::ConstraintItem { id, exprs, annos } = &constraint_item;
 
         let is_satisfiable: bool = match id.as_str() {
+            "pumpkin_disjunctive_detectable_precedences" => {
+                compile_disjunctive_detectable_precedences(context, exprs, constraint_tag)?
+            }
             "pumpkin_disjunctive_strict" => {
                 compile_disjunctive_strict(context, exprs, constraint_tag)?
             }
