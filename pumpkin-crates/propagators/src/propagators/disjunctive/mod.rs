@@ -12,6 +12,7 @@ pub use disjunctive_propagator::DisjunctiveConstructor;
 pub use disjunctive_propagator::DisjunctivePropagator;
 pub use disjunctive_task::ArgDisjunctiveTask;
 pub use detectable_precedences::DetectablePrecedencesPropagator;
+pub use detectable_precedences::DetectablePrecedencesConstructor;
 pub(crate) mod checker;
 pub use checker::*;
 pub(crate) mod utils;
