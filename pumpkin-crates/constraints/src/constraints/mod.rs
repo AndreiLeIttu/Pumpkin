@@ -35,6 +35,8 @@ mod cumulative;
 mod disjunctive_strict;
 mod element;
 mod table;
+mod disjunctive_detectable_precendences;
+mod disjunctive_combined;
 
 pub use all_different::*;
 pub use arithmetic::*;
@@ -44,3 +46,5 @@ pub use cumulative::*;
 pub use disjunctive_strict::*;
 pub use element::*;
 pub use table::*;
+pub use disjunctive_detectable_precendences::*;
+pub use disjunctive_combined::*;

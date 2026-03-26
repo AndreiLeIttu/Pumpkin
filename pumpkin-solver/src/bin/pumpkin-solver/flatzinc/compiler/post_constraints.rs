@@ -25,8 +25,13 @@ pub(crate) fn run(
 ) -> Result<(), FlatZincError> {
     for (constraint_tag, constraint_item) in std::mem::take(&mut context.constraints) {
         let flatzinc::ConstraintItem { id, exprs, annos } = &constraint_item;
-
         let is_satisfiable: bool = match id.as_str() {
+            "pumpkin_disjunctive_combined" => {
+                compile_disjunctive_combined(context, exprs, constraint_tag)?
+            }
+            "pumpkin_disjunctive_detectable_precedences" => {
+                compile_disjunctive_detectable_precedences(context, exprs, constraint_tag)?
+            }
             "pumpkin_disjunctive_strict" => {
                 compile_disjunctive_strict(context, exprs, constraint_tag)?
             }
@@ -366,6 +371,58 @@ macro_rules! check_parameters {
             });
         }
     };
+}
+
+fn compile_disjunctive_combined(
+    context: &mut CompilationContext<'_>,
+    exprs: &[flatzinc::Expr],
+    constraint_tag: ConstraintTag,
+) -> Result<bool, FlatZincError> {
+    check_parameters!(exprs, 2, "pumpkin_disjunctive_combined");
+
+    let start_times = context.resolve_integer_variable_array(&exprs[0])?;
+    let durations = context.resolve_array_integer_constants(&exprs[1])?;
+
+    assert_eq!(start_times.len(), durations.len());
+
+    let post_result = pumpkin_constraints::disjunctive_combined(
+        start_times
+            .iter()
+            .zip(durations.iter())
+            .map(|(&start_time, &duration)| ArgDisjunctiveTask {
+                start_time,
+                processing_time: duration,
+            }),
+        constraint_tag,
+    )
+    .post(context.solver);
+    Ok(post_result.is_ok())
+}
+
+fn compile_disjunctive_detectable_precedences(
+    context: &mut CompilationContext<'_>,
+    exprs: &[flatzinc::Expr],
+    constraint_tag: ConstraintTag,
+) -> Result<bool, FlatZincError> {
+    check_parameters!(exprs, 2, "pumpkin_disjunctive");
+
+    let start_times = context.resolve_integer_variable_array(&exprs[0])?;
+    let durations = context.resolve_array_integer_constants(&exprs[1])?;
+
+    assert_eq!(start_times.len(), durations.len());
+
+    let post_result = pumpkin_constraints::disjunctive_detectable_precendences(
+        start_times
+            .iter()
+            .zip(durations.iter())
+            .map(|(&start_time, &duration)| ArgDisjunctiveTask {
+                start_time,
+                processing_time: duration,
+            }),
+        constraint_tag,
+    )
+    .post(context.solver);
+    Ok(post_result.is_ok())
 }
 
 fn compile_disjunctive_strict(
