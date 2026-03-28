@@ -1,4 +1,4 @@
-mod timeline_prev;
-pub(crate) use timeline_prev::*;
+mod timeline;
+pub(crate) use timeline::*;
 mod union_find;
 pub(crate) use union_find::*;

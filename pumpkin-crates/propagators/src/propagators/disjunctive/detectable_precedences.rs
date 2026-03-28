@@ -23,8 +23,8 @@ use pumpkin_core::variables::TransformableVariable;
 
 use super::disjunctive_task::ArgDisjunctiveTask;
 use super::disjunctive_task::DisjunctiveTask;
-use crate::disjunctive::DisjunctineDetectablePrecedences;
-use crate::disjunctive::TimelinePrev;
+use crate::disjunctive::DisjunctiveDetectablePrecedences;
+use crate::disjunctive::Timeline;
 use crate::disjunctive::checker::DisjunctiveEdgeFindingChecker;
 
 /// [`Propagator`] responsible for using one variant of disjunctive reasoning to propagate the [Disjunctive](https://sofdem.github.io/gccat/gccat/Cdisjunctive.html) constraint.
@@ -51,6 +51,8 @@ pub struct DetectablePrecedencesPropagator<Var: IntegerVariable> {
     i_lst: Vec<DisjunctiveTask<Var>>,
     i_ect_rev: Vec<DisjunctiveTask<<<Var as IntegerVariable>::AffineView as IntegerVariable>::AffineView>>,
     i_lst_rev: Vec<DisjunctiveTask<<<Var as IntegerVariable>::AffineView as IntegerVariable>::AffineView>>,
+    root_bounds: Vec<(i32, i32)>,
+    root_bounds_rev: Vec<(i32, i32)>,
 
     inference_code: InferenceCode,
 }
@@ -97,7 +99,21 @@ impl<Var: IntegerVariable + 'static> PropagatorConstructor for DetectablePrecede
             })
             .collect::<Vec<_>>();
 
-        let inference_code = InferenceCode::new(self.constraint_tag, DisjunctineDetectablePrecedences);
+        let mut root_bounds = vec![];
+        let mut root_bounds_rev = vec![];
+
+        for i in 0..tasks.len() {
+            let est_i = context.lower_bound(&tasks[i].start_time);
+            let lst_i = context.upper_bound(&tasks[i].start_time);
+
+            let rev_est_i = context.lower_bound(&reversed_tasks[i].start_time);
+            let rev_lst_i = context.upper_bound(&reversed_tasks[i].start_time);
+
+            root_bounds.push((est_i, lst_i));
+            root_bounds_rev.push((rev_est_i, rev_lst_i));
+        }
+
+        let inference_code = InferenceCode::new(self.constraint_tag, DisjunctiveDetectablePrecedences);
 
         tasks.iter().for_each(|task| {
             context.register(task.start_time.clone(), DomainEvents::BOUNDS, task.id);
@@ -110,13 +126,15 @@ impl<Var: IntegerVariable + 'static> PropagatorConstructor for DetectablePrecede
             i_lst: tasks.clone(),
             i_ect_rev: reversed_tasks.clone(),
             i_lst_rev: reversed_tasks.clone(),
+            root_bounds: root_bounds,
+            root_bounds_rev: root_bounds_rev,
             inference_code,
         }
     }
 
     fn add_inference_checkers(&self, mut checkers: InferenceCheckers<'_>) {
         checkers.add_inference_checker(
-            InferenceCode::new(self.constraint_tag, DisjunctineDetectablePrecedences),
+            InferenceCode::new(self.constraint_tag, DisjunctiveDetectablePrecedences),
             Box::new(DisjunctiveEdgeFindingChecker {
                 tasks: self
                     .tasks
@@ -139,11 +157,11 @@ impl<Var: IntegerVariable + 'static> Propagator for DetectablePrecedencesPropaga
     fn propagate(&mut self, mut context: PropagationContext) -> PropagationStatusCP {
         self.i_ect.sort_by_key(|a| DisjunctiveTask::get_ect(&a, context.lower_bound(&a.start_time)));
         self.i_lst.sort_by_key(|a| context.upper_bound(&a.start_time));
-        detectable_precedences(&self.tasks, &mut context, &self.i_ect, &self.i_lst, &self.inference_code)?;
+        detectable_precedences(&self.tasks, &mut context, &self.i_ect, &self.i_lst, &self.root_bounds, &self.inference_code)?;
 
         self.i_ect_rev.sort_by_key(|a| DisjunctiveTask::get_ect(&a, context.lower_bound(&a.start_time)));
         self.i_lst_rev.sort_by_key(|a| context.upper_bound(&a.start_time));
-        detectable_precedences(&self.reversed_tasks, &mut context, &self.i_ect_rev, &self.i_lst_rev, &self.inference_code)
+        detectable_precedences(&self.reversed_tasks, &mut context, &self.i_ect_rev, &self.i_lst_rev, &self.root_bounds_rev, &self.inference_code)
     }
 
     fn propagate_from_scratch(&self, mut context: PropagationContext) -> PropagationStatusCP {
@@ -153,11 +171,11 @@ impl<Var: IntegerVariable + 'static> Propagator for DetectablePrecedencesPropaga
         let mut i_lst_rev = self.i_lst_rev.clone();
         i_ect.sort_by_key(|a| DisjunctiveTask::get_ect(&a, context.lower_bound(&a.start_time)));
         i_lst.sort_by_key(|a| context.upper_bound(&a.start_time));
-        detectable_precedences(&self.tasks, &mut context, &i_ect, &i_lst, &self.inference_code)?;
+        detectable_precedences(&self.tasks, &mut context, &i_ect, &i_lst, &self.root_bounds, &self.inference_code)?;
 
         i_ect_rev.sort_by_key(|a| DisjunctiveTask::get_ect(&a, context.lower_bound(&a.start_time)));
         i_lst_rev.sort_by_key(|a| context.upper_bound(&a.start_time));
-        detectable_precedences(&self.reversed_tasks, &mut context, &i_ect_rev, &i_lst_rev, &self.inference_code)
+        detectable_precedences(&self.reversed_tasks, &mut context, &i_ect_rev, &i_lst_rev, &self.root_bounds_rev, &self.inference_code)
     }
 }
 
@@ -167,18 +185,10 @@ fn detectable_precedences<Var:IntegerVariable + 'static>(
     context: &mut PropagationContext, 
     i_ect: &Vec<DisjunctiveTask<Var>>, 
     i_lst: &Vec<DisjunctiveTask<Var>>,
+    root_bounds: &Vec<(i32, i32)>,
     inference_code: &InferenceCode,
 ) -> PropagationStatusCP {
-    let mut timeline = TimelinePrev::new(tasks.into(), context.domains());
-    
-    let reason = tasks.iter().flat_map(|task| {
-        let est = context.lower_bound(&task.start_time);
-        let lst = context.upper_bound(&task.start_time);
-        vec![
-            predicate![task.start_time >= est],
-            predicate![task.start_time <= lst],
-        ]
-    }).collect::<PropositionalConjunction>();
+    let mut timeline = Timeline::new(tasks.into(), &context.domains());
 
     let mut j = 0;
     let mut k = i_lst[0].clone();
@@ -213,7 +223,7 @@ fn detectable_precedences<Var:IntegerVariable + 'static>(
             if !propagations.contains_key(&i.id)
                 || ect_timeline > propagations.get(&i.id).unwrap().0
             {
-                //let reason = get_explanation_left(i,tasks,  &timeline, &assignments, &root_bounds);
+                let reason = get_propagation_explanation(i,tasks,  &timeline, &context.domains(), root_bounds);
                 let _ = propagations.insert(i.id, (ect_timeline, reason.clone()));
             }
         } else {
@@ -225,7 +235,7 @@ fn detectable_precedences<Var:IntegerVariable + 'static>(
                 if !propagations.contains_key(&i.id)
                     || ect_timeline > propagations.get(&i.id).unwrap().0
                 {
-                    //let reason = get_explanation_left(i,tasks,  &timeline, &assignments, &root_bounds);
+                    let reason = get_propagation_explanation(i, tasks, &timeline, &context.domains(), root_bounds);
                     let _ = propagations.insert(i.id, (ect_timeline, reason.clone()));
                 }
                 timeline.schedule_task(&Rc::new(i.clone()));
@@ -235,7 +245,7 @@ fn detectable_precedences<Var:IntegerVariable + 'static>(
                     if !propagations.contains_key(&z.id)
                         || ect_timeline > propagations.get(&z.id).unwrap().0
                     {
-                        //let reason = get_explanation_left(z,tasks, &timeline, &assignments, &root_bounds);
+                        let reason = get_propagation_explanation(z, tasks, &timeline, &context.domains(), root_bounds);
                         let _ = propagations.insert(z.id, (ect_timeline, reason.clone()));
                     }
                 }
@@ -264,7 +274,58 @@ fn detectable_precedences<Var:IntegerVariable + 'static>(
     Ok(())
 }
 
-fn get_conflict_explanation<Var: IntegerVariable + 'static>(a: &DisjunctiveTask<Var>, b: &DisjunctiveTask<Var>, context: Domains) -> PropositionalConjunction {
+fn get_propagation_explanation<Var: IntegerVariable + 'static>(
+    task: &DisjunctiveTask<Var>,
+    tasks: &[DisjunctiveTask<Var>], 
+    timeline: &Timeline, 
+    domains: &Domains,
+    root_bounds: &Vec<(i32, i32)>
+) -> PropositionalConjunction {
+    let mut reason = PropositionalConjunction::new(vec![]);
+    let omega = timeline.get_omega();
+    
+    if omega.is_empty() {
+        reason.push(predicate![task.start_time >= domains.lower_bound(&task.start_time)]);
+    }
+
+    let mut est_omega = std::i32::MAX;
+    let mut lst_omega = 0;
+
+    for &omega_task_id in omega.iter() {
+        let omega_task = tasks[omega_task_id.unpack() as usize].clone();
+        est_omega = est_omega.min(domains.lower_bound(&omega_task.start_time));
+        lst_omega = lst_omega.max(domains.upper_bound(&omega_task.start_time));
+    }
+
+    let est_i = domains.lower_bound(&task.start_time);
+    let p_i = task.processing_time;
+    let est_i_lift = est_i.min(lst_omega - p_i + 1);
+    if root_bounds[task.id.unpack() as usize].0 <= est_i_lift {
+        reason.push(predicate![task.start_time >= est_i_lift]);
+    }
+
+    reason.extend(omega.iter().flat_map(|t_id| {
+        let om_task = tasks[t_id.unpack() as usize].clone();
+        let mut om_reason = vec![];
+        if root_bounds[t_id.unpack() as usize].0 <= est_omega {
+            om_reason.push(predicate![om_task.start_time >= est_omega]);
+        }
+
+        if root_bounds[t_id.unpack() as usize].1 >= lst_omega {
+            om_reason.push(predicate![om_task.start_time <= lst_omega]);
+        }
+
+        om_reason
+    }));
+
+    reason
+}
+
+fn get_conflict_explanation<Var: IntegerVariable + 'static>(
+    a: &DisjunctiveTask<Var>,
+    b: &DisjunctiveTask<Var>,
+    context: Domains,
+) -> PropositionalConjunction {
 
     return conjunction!(
         [a.start_time >= context.lower_bound(&a.start_time)] &
