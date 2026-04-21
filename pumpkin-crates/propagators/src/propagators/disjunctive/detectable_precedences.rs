@@ -286,10 +286,11 @@ fn get_propagation_explanation<Var: IntegerVariable + 'static>(
     
     if omega.is_empty() {
         reason.push(predicate![task.start_time >= domains.lower_bound(&task.start_time)]);
+        return reason;
     }
 
     let mut est_omega = std::i32::MAX;
-    let mut lst_omega = 0;
+    let mut lst_omega = std::i32::MIN;
 
     for &omega_task_id in omega.iter() {
         let omega_task = tasks[omega_task_id.unpack() as usize].clone();
