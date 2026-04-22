@@ -10,20 +10,20 @@ use pumpkin_core::propagation::LocalId;
 use pumpkin_core::propagation::ReadDomains;
 use pumpkin_core::variables::IntegerVariable;
 
-pub(crate) struct TimelinePrev {
+pub(crate) struct Timeline {
     pub(crate) t: Vec<i32>,
     pub(crate) c: Vec<i32>,
     pub(crate) m: Vec<i32>,
     pub(crate) e: i32,
     pub(crate) s: UnionFind,
+    pub(crate) u: Vec<Vec<LocalId>>,
     pub(crate) lower: i32,
-    pub (crate) prev_scheduled: Vec<LocalId>,
 }
 
-impl TimelinePrev {
+impl Timeline {
     pub(crate) fn new<Var: IntegerVariable + 'static>(
         tasks: Rc<[DisjunctiveTask<Var>]>,
-        context: Domains,
+        context: &Domains,
     ) -> Self {
         let mut tasks_est = tasks.iter().cloned().collect::<Vec<DisjunctiveTask<Var>>>();
         tasks_est.sort_by_key(|a| context.lower_bound(&a.start_time));
@@ -50,14 +50,14 @@ impl TimelinePrev {
         }
         let n = t.len();
         let lower = tasks.iter().map(|task| context.lower_bound(&task.start_time)).min().unwrap();
-        TimelinePrev {
+        Timeline {
             t: t,
             c: c,
             m: m,
             e: -1,
             s: UnionFind::new(n as i32),
+            u: vec![vec![]; n],
             lower: lower,
-            prev_scheduled: vec![],
         }
     }
 
@@ -73,12 +73,21 @@ impl TimelinePrev {
             rho -= delta;
             self.c[k] -= delta;
             if self.c[k] == 0 {
+                let a = k;
                 let _ = self.s.union(k as i32, (k + 1) as i32);
                 k = self.s.find(k as i32) as usize;
+                if a != k {
+                    let b = self.u[a].clone();
+                    self.u[k].extend(b.iter());
+                } else {
+                    panic!("This should not happen, the union-find structure is broken");
+                }
+            }
+            if rho == 0 {
+                self.u[k].push(task.id);
             }
         }
         self.e = max(self.e, k as i32);
-        self.prev_scheduled.push(task.id);
     }
 
     pub(crate) fn earliest_completion_time(&self) -> i32 {
@@ -88,8 +97,13 @@ impl TimelinePrev {
         self.t[(self.e + 1) as usize] - self.c[self.e as usize]
     }
 
-    pub(crate) fn get_scheduled_tasks(&self) -> Vec<LocalId> {
-        self.prev_scheduled.clone()
+    pub(crate) fn get_omega(&self) -> Vec<LocalId> {
+        if self.e == -1 {
+            return vec![];
+        }
+        
+        let omega = self.u[self.e as usize].clone();
+        omega
     }
     
     fn print_uf(&mut self) {

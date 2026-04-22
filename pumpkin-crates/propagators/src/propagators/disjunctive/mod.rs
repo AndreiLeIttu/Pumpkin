@@ -19,4 +19,4 @@ pub(crate) mod utils;
 pub(crate) use utils::*;
 
 declare_inference_label!(DisjunctiveEdgeFinding);
-declare_inference_label!(DisjunctineDetectablePrecedences);
+declare_inference_label!(DisjunctiveDetectablePrecedences);
