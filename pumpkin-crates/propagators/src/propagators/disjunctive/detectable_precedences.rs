@@ -10,6 +10,7 @@ use pumpkin_core::propagation::DomainEvents;
 use pumpkin_core::propagation::Domains;
 use pumpkin_core::propagation::InferenceCheckers;
 use pumpkin_core::propagation::LocalId;
+use pumpkin_core::propagation::Priority;
 use pumpkin_core::propagation::PropagationContext;
 use pumpkin_core::propagation::Propagator;
 use pumpkin_core::propagation::PropagatorConstructor;
@@ -150,6 +151,10 @@ impl<Var: IntegerVariable + 'static> PropagatorConstructor for DetectablePrecede
 }
 
 impl<Var: IntegerVariable + 'static> Propagator for DetectablePrecedencesPropagator<Var> {
+    fn priority(&self) -> Priority {
+        Priority::Medium
+    }
+
     fn name(&self) -> &str {
         "DisjunctiveDetectablePrecedences"
     }

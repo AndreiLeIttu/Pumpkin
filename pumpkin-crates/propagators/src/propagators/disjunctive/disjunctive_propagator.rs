@@ -10,6 +10,7 @@ use pumpkin_core::proof::InferenceCode;
 use pumpkin_core::propagation::DomainEvents;
 use pumpkin_core::propagation::InferenceCheckers;
 use pumpkin_core::propagation::LocalId;
+use pumpkin_core::propagation::Priority;
 use pumpkin_core::propagation::PropagationContext;
 use pumpkin_core::propagation::Propagator;
 use pumpkin_core::propagation::PropagatorConstructor;
@@ -125,6 +126,10 @@ impl<Var: IntegerVariable + 'static> PropagatorConstructor for DisjunctiveConstr
 }
 
 impl<Var: IntegerVariable + 'static> Propagator for DisjunctivePropagator<Var> {
+    fn priority(&self) -> Priority {
+        Priority::High
+    }
+
     fn name(&self) -> &str {
         "DisjunctiveStrict"
     }
